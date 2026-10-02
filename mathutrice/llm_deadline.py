@@ -39,7 +39,7 @@ class LLMDeadline:
 
         try:
             return self._client.with_options(
-                timeout=time_left, max_retries=0
+                max_retries=0
             ).chat.completions.create(**kwargs)
         except openai.APITimeoutError as e:
             raise DeadlineReached("Échéance du test d'évaluation atteinte") from e
