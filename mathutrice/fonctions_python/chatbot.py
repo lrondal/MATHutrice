@@ -1,4 +1,5 @@
 from mathutrice.llm_client import client, MODEL
+from mathutrice.lacune_evaluation.LLM_as_Evaluator import _parse_json
 
 system_prompt = """Tu es MATHutrice, une tutrice IA specialisee en mathematiques.
 
