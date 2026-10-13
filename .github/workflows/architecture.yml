@@ -103,6 +103,8 @@ jobs:
           dev-login-key: ${{ secrets.DEV_LOGIN_KEY }}
           session-secret: ${{ secrets.SESSION_SECRET }}
           llm-api-key: ${{ secrets.LLM_API_KEY }}
+          # Staging, like a laptop, calls Mistral directly.
+          llm-base-url: https://api.mistral.ai/v1
 
   # The Promotion, first half: find the image of staging's last green deploy.
   # It reads this workflow's own runs, not the staging app. A deploy sets the
@@ -183,3 +185,6 @@ jobs:
           dev-login-key: ${{ secrets.DEV_LOGIN_KEY }}
           session-secret: ${{ secrets.SESSION_SECRET }}
           llm-api-key: ${{ secrets.LLM_API_KEY }}
+          # The URL the Instructor gave, which relays the Mistral key in place
+          # of Mistral's own. A secret, so that the logs mask its token.
+          llm-base-url: ${{ secrets.LLM_BASE_URL }}

@@ -27,22 +27,27 @@ inputs:
   llm-api-key:
     description: LLM_API_KEY, the Mistral key.
     required: true
+  llm-base-url:
+    description: LLM_BASE_URL, the endpoint the app's LLM calls go through.
+    required: true
 
 runs:
   using: composite
   steps:
     # An empty secret would be written as an empty setting: without
     # DEV_LOGIN_KEY anyone signs in as anyone, and the app refuses to start
-    # without SESSION_SECRET or LLM_API_KEY. Only the names are printed.
+    # without SESSION_SECRET, LLM_API_KEY or LLM_BASE_URL. Only the names are
+    # printed.
     - name: Check this environment's secrets are set
       shell: bash
       env:
         DEV_LOGIN_KEY: ${{ inputs.dev-login-key }}
         SESSION_SECRET: ${{ inputs.session-secret }}
         LLM_API_KEY: ${{ inputs.llm-api-key }}
+        LLM_BASE_URL: ${{ inputs.llm-base-url }}
       run: |
         missing=0
-        for name in DEV_LOGIN_KEY SESSION_SECRET LLM_API_KEY; do
+        for name in DEV_LOGIN_KEY SESSION_SECRET LLM_API_KEY LLM_BASE_URL; do
           if [ -z "${!name}" ]; then
             echo "Secret $name is not set in this GitHub Environment" >&2
             missing=1
@@ -69,6 +74,7 @@ runs:
         DEV_LOGIN_KEY: ${{ inputs.dev-login-key }}
         SESSION_SECRET: ${{ inputs.session-secret }}
         LLM_API_KEY: ${{ inputs.llm-api-key }}
+        LLM_BASE_URL: ${{ inputs.llm-base-url }}
       run: |
         az webapp config appsettings set \
           --resource-group "$RESOURCE_GROUP" --name "$APP_NAME" --output none \
@@ -77,7 +83,7 @@ runs:
             WEBSITES_ENABLE_APP_SERVICE_STORAGE=false \
             AUTH_MODE=dev \
             DATABASE_URL=sqlite:///./mathutrice.db \
-            LLM_BASE_URL=https://api.mistral.ai/v1 \
+            "LLM_BASE_URL=$LLM_BASE_URL" \
             LLM_MODEL=ministral-14b-latest \
             "DEV_LOGIN_KEY=$DEV_LOGIN_KEY" \
             "SESSION_SECRET=$SESSION_SECRET" \
