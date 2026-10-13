@@ -1,4 +1,5 @@
 from mathutrice.llm_client import client, MODEL
+from mathutrice.production_signals import report_caught_exception
 
 system_prompt = """Tu es MATHutrice, une tutrice IA specialisee en mathematiques.
 
@@ -43,6 +44,7 @@ def chat_stream_with_history(history: list[dict]):
                     yield chunk
 
     except Exception as e:
+        report_caught_exception(e)
         yield f"Erreur: {str(e)}"
 
     return full_response
@@ -66,6 +68,7 @@ def chat(user_input: str) -> str:
         messages_history.append({"role": "assistant", "content": reply})
         return reply
     except Exception as e:
+        report_caught_exception(e)
         messages_history.pop()
         return f"Erreur: {str(e)}"
 

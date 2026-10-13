@@ -22,6 +22,7 @@ import json
 import logging
 
 from mathutrice.llm_client import client, MODEL
+from mathutrice.production_signals import report_caught_exception
 
 # from generator_test.lacune_evaluation.LLM_as_Evaluator import competences_dict
 # from main import REFERENTIEL
@@ -98,6 +99,8 @@ def call_mistral(
         except ValueError as e:
             logger.warning(f"Tentative {attempt}/{MAX_RETRIES} échouée — {e}")
             if attempt == MAX_RETRIES:
+                # Only the last failure: an attempt retried is not yet an error.
+                report_caught_exception(e)
                 logger.error(
                     f"Abandon après {MAX_RETRIES} tentatives pour notion='{notion}'"
                 )

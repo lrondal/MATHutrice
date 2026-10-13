@@ -20,6 +20,8 @@ from mathutrice.database import Session as DBSession
 from apscheduler.schedulers.background import BackgroundScheduler
 from decimal import Decimal
 from mathutrice import models
+from mathutrice import production_signals
+from mathutrice.production_signals import report_caught_exception
 from mathutrice.referentiel import REFERENTIEL
 from mathutrice.seed import seed_missing
 import msal
@@ -177,7 +179,7 @@ def start_production_signals():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.posthog, log_provider, loggers = start_production_signals()
+    production_signals.client, log_provider, loggers = start_production_signals()
 
     create_db_and_tables()
     seed_missing(engine)
@@ -190,9 +192,9 @@ async def lifespan(app: FastAPI):
 
     scheduler.shutdown()
 
-    if app.state.posthog:
-        app.state.posthog.shutdown()
-        app.state.posthog = None
+    if production_signals.client:
+        production_signals.client.shutdown()
+        production_signals.client = None
 
     if log_provider:
         for logger in loggers:
@@ -276,7 +278,7 @@ from mathutrice.lacune_evaluation.LLM_as_Evaluator import (  # noqa: E402
 # raised again: the answer is unchanged.
 @app.middleware("http")
 async def posthog_context(request: Request, call_next):
-    client = getattr(request.app.state, "posthog", None)
+    client = production_signals.client
 
     if not client:
         return await call_next(request)
@@ -1279,6 +1281,7 @@ async def chat_complete_endpoint(data: ChatRequest):
         }
 
     except Exception as e:
+        report_caught_exception(e)
         return JSONResponse(
             status_code=500,
             content={
@@ -1410,6 +1413,7 @@ async def reset_session_endpoint(
         }
 
     except Exception as e:
+        report_caught_exception(e)
         return JSONResponse(
             status_code=500,
             content={"ok": False, "error": str(e)},
@@ -1530,6 +1534,7 @@ async def positioning_endpoint(
         return JSONResponse(status_code=400, content={"ok": False, "error": str(e)})
 
     except Exception as e:
+        report_caught_exception(e)
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
 
 
@@ -1567,6 +1572,7 @@ async def next_question_endpoint(
         return JSONResponse(status_code=400, content={"ok": False, "error": str(e)})
 
     except Exception as e:
+        report_caught_exception(e)
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
 
 
@@ -1608,6 +1614,7 @@ async def submit_answer_endpoint(
         return {"ok": True, "new_scores": result}
 
     except Exception as e:
+        report_caught_exception(e)
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
 
 
@@ -1679,6 +1686,7 @@ async def get_scores_endpoint(
         }
 
     except Exception as e:
+        report_caught_exception(e)
         return JSONResponse(
             status_code=500,
             content={"ok": False, "error": str(e)},
@@ -1773,6 +1781,7 @@ async def save_session_history_endpoint(
         }
 
     except Exception as e:
+        report_caught_exception(e)
         return JSONResponse(
             status_code=500,
             content={"ok": False, "error": str(e)},
@@ -1850,6 +1859,7 @@ async def get_session_history_endpoint(
         }
 
     except Exception as e:
+        report_caught_exception(e)
         return JSONResponse(
             status_code=500,
             content={"ok": False, "error": str(e)},
@@ -1886,6 +1896,7 @@ async def evaluate_qro_endpoint(
         }
 
     except Exception as e:
+        report_caught_exception(e)
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
 
 
@@ -2071,6 +2082,7 @@ async def feedback_endpoint(
                         break
 
             except Exception as reco_err:
+                report_caught_exception(reco_err)
                 print("Reco error:", reco_err)
 
         return {
@@ -2081,6 +2093,7 @@ async def feedback_endpoint(
         }
 
     except Exception as e:
+        report_caught_exception(e)
         print("FEEDBACK ERROR:", traceback.format_exc())
 
         return JSONResponse(
@@ -2178,6 +2191,7 @@ async def next_targeted_endpoint(
         }
 
     except Exception as e:
+        report_caught_exception(e)
         print("NEXT_TARGETED ERROR:", traceback.format_exc())
 
         return JSONResponse(
@@ -2255,6 +2269,7 @@ async def mark_training_started(
         return {"ok": True}
 
     except Exception as e:
+        report_caught_exception(e)
         return JSONResponse(
             status_code=500,
             content={"ok": False, "error": str(e)},
@@ -2358,6 +2373,7 @@ async def evaluation_endpoint(
         }
 
     except Exception as e:
+        report_caught_exception(e)
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
 
 
@@ -2439,6 +2455,7 @@ async def get_recommendations_endpoint(
         }
 
     except Exception as e:
+        report_caught_exception(e)
         return JSONResponse(
             status_code=500,
             content={"ok": False, "error": str(e)},
