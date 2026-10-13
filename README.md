@@ -116,6 +116,41 @@ The first call answers `303` with a `Set-Cookie: session=…`. `role` is
 user's name, or one derived from the address. Add `-d 'key=…'` when
 `DEV_LOGIN_KEY` is set.
 
+## Deploying on Azure App Service
+
+`.github/workflows/architecture.yml` deploys this fork to **staging**, an App
+Service app on one B1 Linux plan in Switzerland North, always on. It holds
+generated data and no real users, so it signs in through the
+[connexion de développement](#connexion-de-développement-auth_modedev),
+guarded by its own `DEV_LOGIN_KEY` and its own `SESSION_SECRET`.
+
+- **On green only.** A push to `course-2026-fallback-clean-branch` whose
+  `architecture` and `test` jobs both pass is built into one image, tagged with
+  its commit and pushed to GHCR (`ghcr.io/lrondal/mathutrice:<commit>`), then
+  deployed to staging. A pull request, or a red run, deploys nothing.
+- **The image** (`Dockerfile`) runs one process, `uvicorn mathutrice.app:app`,
+  as in [Run it locally](#run-it-locally); the hourly conversation cleanup runs
+  inside it. It holds its commit as `REVISION`, which the application sends
+  back in the `X-Revision` header of every response. The deploy passes only
+  once `/dev/login` answers `200` with that commit, so a previous container
+  still answering does not count.
+
+The settings live in the GitHub Environment `staging`, never in a committed
+file: the variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
+`AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP` and `AZURE_WEBAPP_NAME`, and
+the secrets `DEV_LOGIN_KEY`, `SESSION_SECRET` and `LLM_API_KEY`. Every deploy
+writes them to the app's settings (`.github/actions/deploy-to-app-service`),
+with `AUTH_MODE=dev`, the SQLite `DATABASE_URL` and Mistral's `LLM_BASE_URL`
+and `LLM_MODEL`. The workflow logs in to Azure through OpenID Connect, as its
+GitHub Environment, and stores no Azure password. The GHCR package must be
+public: App Service pulls it without credentials.
+
+**Known limit: the data is reset at every deploy and every restart.** The
+SQLite file lives on the container's own disk, not on App Service's `/home`, a
+network share on which SQLite cannot take its locks. Each start creates the
+tables and seeds them again, so everything written since the last start is
+lost, uploaded PDFs included.
+
 ## Layout
 
 ```
@@ -132,6 +167,8 @@ mathutrice/            the application package
   rag_documents/       PDFs uploaded by teachers (runtime data, kept out of the wheel)
 docs/                  the smoke test and the ADRs
 scripts/               the architecture checks
+Dockerfile             the image every environment runs
+.github/               the check, and the deploy to staging
 ```
 
 Package boundaries are machine-checked: a name starting with `_` cannot be
