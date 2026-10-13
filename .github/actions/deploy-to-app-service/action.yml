@@ -30,14 +30,21 @@ inputs:
   llm-base-url:
     description: LLM_BASE_URL, the endpoint the app's LLM calls go through.
     required: true
+  posthog-project-token:
+    description: POSTHOG_PROJECT_TOKEN, the PostHog project's token.
+    required: true
+  posthog-environment:
+    description: POSTHOG_ENVIRONMENT, the environment's name in PostHog.
+    required: true
 
 runs:
   using: composite
   steps:
     # An empty secret would be written as an empty setting: without
     # DEV_LOGIN_KEY anyone signs in as anyone, and the app refuses to start
-    # without SESSION_SECRET, LLM_API_KEY or LLM_BASE_URL. Only the names are
-    # printed.
+    # without SESSION_SECRET, LLM_API_KEY or LLM_BASE_URL, or with
+    # POSTHOG_PROJECT_TOKEN missing while the other PostHog settings are
+    # written. Only the names are printed.
     - name: Check this environment's secrets are set
       shell: bash
       env:
@@ -45,9 +52,10 @@ runs:
         SESSION_SECRET: ${{ inputs.session-secret }}
         LLM_API_KEY: ${{ inputs.llm-api-key }}
         LLM_BASE_URL: ${{ inputs.llm-base-url }}
+        POSTHOG_PROJECT_TOKEN: ${{ inputs.posthog-project-token }}
       run: |
         missing=0
-        for name in DEV_LOGIN_KEY SESSION_SECRET LLM_API_KEY LLM_BASE_URL; do
+        for name in DEV_LOGIN_KEY SESSION_SECRET LLM_API_KEY LLM_BASE_URL POSTHOG_PROJECT_TOKEN; do
           if [ -z "${!name}" ]; then
             echo "Secret $name is not set in this GitHub Environment" >&2
             missing=1
@@ -66,6 +74,8 @@ runs:
     # - AUTH_MODE=dev: these environments hold generated data and no real users;
     #   the dev sign-in is guarded by the environment's own DEV_LOGIN_KEY, and
     #   its cookie by the environment's own SESSION_SECRET.
+    # - POSTHOG_*: errors and logs go to the PostHog project in the EU region,
+    #   tagged with the environment's name.
     - name: Write this environment's settings
       shell: bash
       env:
@@ -75,6 +85,8 @@ runs:
         SESSION_SECRET: ${{ inputs.session-secret }}
         LLM_API_KEY: ${{ inputs.llm-api-key }}
         LLM_BASE_URL: ${{ inputs.llm-base-url }}
+        POSTHOG_PROJECT_TOKEN: ${{ inputs.posthog-project-token }}
+        POSTHOG_ENVIRONMENT: ${{ inputs.posthog-environment }}
       run: |
         az webapp config appsettings set \
           --resource-group "$RESOURCE_GROUP" --name "$APP_NAME" --output none \
@@ -87,7 +99,10 @@ runs:
             LLM_MODEL=ministral-14b-latest \
             "DEV_LOGIN_KEY=$DEV_LOGIN_KEY" \
             "SESSION_SECRET=$SESSION_SECRET" \
-            "LLM_API_KEY=$LLM_API_KEY"
+            "LLM_API_KEY=$LLM_API_KEY" \
+            POSTHOG_HOST=https://eu.i.posthog.com \
+            "POSTHOG_PROJECT_TOKEN=$POSTHOG_PROJECT_TOKEN" \
+            "POSTHOG_ENVIRONMENT=$POSTHOG_ENVIRONMENT"
 
     # The image is public on GHCR, so the app pulls it without credentials.
     - name: Run the image
