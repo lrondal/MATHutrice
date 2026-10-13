@@ -23,6 +23,13 @@ from mathutrice import models
 from mathutrice.referentiel import REFERENTIEL
 from mathutrice.seed import seed_missing
 import msal
+import posthog
+from posthog import Posthog
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+from opentelemetry.sdk.resources import Resource
+import logging
 import uvicorn
 import shutil
 import os
@@ -83,8 +90,95 @@ def cleanup_old_conversations():
         session.commit()
 
 
+# ------------------------------------------------------------------
+# Production signals — PostHog, off unless its three settings are set
+# ------------------------------------------------------------------
+
+POSTHOG_SETTINGS = ("POSTHOG_PROJECT_TOKEN", "POSTHOG_HOST", "POSTHOG_ENVIRONMENT")
+
+# Loggers that do not propagate to the root, so the root's handler never sees
+# their records: uvicorn's own, once uvicorn has configured logging. Each one
+# that propagates already reaches the root, and is left alone.
+NON_PROPAGATING_LOGGERS = ("uvicorn",)
+
+
+def read_posthog_settings():
+    """Returns (token, host, environment), or None when none of the three is set.
+
+    Refuses to start when only some are set, naming the first one missing.
+    """
+    values = {name: (os.getenv(name) or "").strip() for name in POSTHOG_SETTINGS}
+
+    if not any(values.values()):
+        return None
+
+    for name, value in values.items():
+        if not value:
+            raise ValueError(f"{name} missing")
+
+    return (
+        values["POSTHOG_PROJECT_TOKEN"],
+        values["POSTHOG_HOST"].rstrip("/"),
+        values["POSTHOG_ENVIRONMENT"],
+    )
+
+
+def start_production_signals():
+    """Starts PostHog error tracking and log forwarding.
+
+    Returns the PostHog client, the log provider and the loggers its handler
+    was added to, or (None, None, []) when PostHog is off.
+    """
+    settings = read_posthog_settings()
+
+    if settings is None:
+        return None, None, []
+
+    token, host, environment = settings
+
+    client = Posthog(
+        token,
+        host=host,
+        enable_exception_autocapture=True,
+        super_properties={"environment": environment},
+    )
+
+    provider = LoggerProvider(
+        resource=Resource.create(
+            {
+                "service.name": "mathutrice",
+                "deployment.environment": environment,
+            }
+        )
+    )
+    provider.add_log_record_processor(
+        BatchLogRecordProcessor(
+            OTLPLogExporter(
+                endpoint=f"{host}/i/v1/logs",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        )
+    )
+    handler = LoggingHandler(logger_provider=provider)
+
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    loggers = [root] + [
+        logger
+        for logger in map(logging.getLogger, NON_PROPAGATING_LOGGERS)
+        if not logger.propagate
+    ]
+
+    for logger in loggers:
+        logger.addHandler(handler)
+
+    return client, provider, loggers
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    app.state.posthog, log_provider, loggers = start_production_signals()
+
     create_db_and_tables()
     seed_missing(engine)
 
@@ -95,6 +189,18 @@ async def lifespan(app: FastAPI):
     yield
 
     scheduler.shutdown()
+
+    if app.state.posthog:
+        app.state.posthog.shutdown()
+        app.state.posthog = None
+
+    if log_provider:
+        for logger in loggers:
+            for handler in logger.handlers[:]:
+                if isinstance(handler, LoggingHandler):
+                    logger.removeHandler(handler)
+
+        log_provider.shutdown()
 
 
 # ------------------------------------------------------------------
@@ -163,6 +269,26 @@ from mathutrice.fonctions_python.type_questions.qro_generator import (  # noqa: 
 from mathutrice.lacune_evaluation.LLM_as_Evaluator import (  # noqa: E402
     diagnostiquer_depuis_competence,
 )
+
+
+# Defined above the line adding SessionMiddleware, so it runs inside it, once
+# the session is loaded. An exception leaving the context is captured, then
+# raised again: the answer is unchanged.
+@app.middleware("http")
+async def posthog_context(request: Request, call_next):
+    client = getattr(request.app.state, "posthog", None)
+
+    if not client:
+        return await call_next(request)
+
+    with posthog.new_context(client=client):
+        user = request.session.get("user")
+
+        if user and user.get("email"):
+            posthog.identify_context(user["email"])
+
+        return await call_next(request)
+
 
 app.add_middleware(
         SessionMiddleware,

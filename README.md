@@ -146,9 +146,12 @@ guarded by its own `DEV_LOGIN_KEY` and its own `SESSION_SECRET`.
 The settings live in each GitHub Environment, `staging` and `production`, never
 in a committed file: the variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
 `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP` and `AZURE_WEBAPP_NAME`, and
-the secrets `DEV_LOGIN_KEY`, `SESSION_SECRET` and `LLM_API_KEY`. Every deploy
-writes them to the app's settings (`.github/actions/deploy-to-app-service`),
-with `AUTH_MODE=dev`, the SQLite `DATABASE_URL` and Mistral's `LLM_MODEL`.
+the secrets `DEV_LOGIN_KEY`, `SESSION_SECRET`, `LLM_API_KEY` and
+`POSTHOG_PROJECT_TOKEN`. Every deploy writes them to the app's settings
+(`.github/actions/deploy-to-app-service`), with `AUTH_MODE=dev`, the SQLite
+`DATABASE_URL`, Mistral's `LLM_MODEL`, and `POSTHOG_HOST` (PostHog's EU region)
+and `POSTHOG_ENVIRONMENT` (`staging` or `production`), which send the app's
+errors and logs to PostHog.
 `LLM_BASE_URL` differs: staging, like a laptop, calls Mistral directly
 (`https://api.mistral.ai/v1`), while production calls its LLM through the URL
 the Instructor gave, held in production's secret `LLM_BASE_URL`, which relays
