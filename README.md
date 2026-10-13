@@ -148,8 +148,12 @@ in a committed file: the variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
 `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP` and `AZURE_WEBAPP_NAME`, and
 the secrets `DEV_LOGIN_KEY`, `SESSION_SECRET` and `LLM_API_KEY`. Every deploy
 writes them to the app's settings (`.github/actions/deploy-to-app-service`),
-with `AUTH_MODE=dev`, the SQLite `DATABASE_URL` and Mistral's `LLM_BASE_URL`
-and `LLM_MODEL`. The workflow logs in to Azure through OpenID Connect, as its
+with `AUTH_MODE=dev`, the SQLite `DATABASE_URL` and Mistral's `LLM_MODEL`.
+`LLM_BASE_URL` differs: staging, like a laptop, calls Mistral directly
+(`https://api.mistral.ai/v1`), while production calls its LLM through the URL
+the Instructor gave, held in production's secret `LLM_BASE_URL`, which relays
+the Mistral key. Production's address is in [`production.json`](production.json).
+The workflow logs in to Azure through OpenID Connect, as its
 GitHub Environment, and stores no Azure password. The GHCR package must be
 public: App Service pulls it without credentials.
 
