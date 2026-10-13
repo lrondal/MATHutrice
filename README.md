@@ -118,9 +118,10 @@ user's name, or one derived from the address. Add `-d 'key=…'` when
 
 ## Deploying on Azure App Service
 
-`.github/workflows/architecture.yml` deploys this fork to **staging**, an App
-Service app on one B1 Linux plan in Switzerland North, always on. It holds
-generated data and no real users, so it signs in through the
+`.github/workflows/architecture.yml` deploys this fork to **staging**, then
+promotes it to **production**: two App Service apps on one B1 Linux plan in
+Switzerland North, always on. They hold generated data and no real users, so
+each signs in through the
 [connexion de développement](#connexion-de-développement-auth_modedev),
 guarded by its own `DEV_LOGIN_KEY` and its own `SESSION_SECRET`.
 
@@ -134,9 +135,16 @@ guarded by its own `DEV_LOGIN_KEY` and its own `SESSION_SECRET`.
   back in the `X-Revision` header of every response. The deploy passes only
   once `/dev/login` answers `200` with that commit, so a previous container
   still answering does not count.
+- **Production by Promotion only.** Production is deployed by a run started by
+  hand: *Actions → the workflow → Run workflow*, or
+  `gh workflow run architecture.yml --repo lrondal/MATHutrice`. It reads the
+  workflow's push runs on `course-2026-fallback-clean-branch`, newest first,
+  logs each one whose `deploy to staging` did not pass as skipped, and deploys
+  the image of the first one that did. It builds nothing: production only runs
+  an image staging already ran.
 
-The settings live in the GitHub Environment `staging`, never in a committed
-file: the variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
+The settings live in each GitHub Environment, `staging` and `production`, never
+in a committed file: the variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
 `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP` and `AZURE_WEBAPP_NAME`, and
 the secrets `DEV_LOGIN_KEY`, `SESSION_SECRET` and `LLM_API_KEY`. Every deploy
 writes them to the app's settings (`.github/actions/deploy-to-app-service`),
